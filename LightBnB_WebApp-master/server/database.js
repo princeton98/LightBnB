@@ -106,18 +106,73 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  //const limitedProperties = {};
-  //for (let i = 1; i <= limit; i++) {
-  //  limitedProperties[i] = properties[i];
-//  }
-//  return Promise.resolve(limitedProperties);
- return pool.query(` 
-SELECT * FROM properties
-LIMIT $1`, [limit])
-.then (res => res.rows);
+  const queryParams = [];
+  
+  let queryString = `SELECT  properties.*, AVG(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+  let amount = Object.keys(options)
+  if (options.city) {
+    let addWord = ""
+    if (amount[0] === 'city') {
+        addWord = "WHERE"
+     }
+     else if (amount.length >= 2) {
+       addWord = "AND"
+     }
+    queryParams.push(`%${options.city}%`);
+    queryString += `${addWord} city LIKE $${queryParams.length} `;
+}
+if (options.owner_id) {
+  let addWord = ""
+  if (amount[0] === 'owner_id') {
+     addWord = "WHERE"
+  }
+  else if (amount.length >= 2) {
+    addWord = "AND"
+  }
+  queryParams.push(`${options.owner_id}`);
+  queryString += `${addWord} properties.owner_id = $${queryParams.length} `;
+}
+if (options.minimum_price_per_night || options.maximum_price_per_night) {
+  let addWord = ""
+  if (amount[0] === 'minimum_price_per_night' || amount[0] === 'maximum_price_per_night') {
+     addWord = "WHERE"
+  }
+  else if (amount.length >= 2) {
+    addWord = "AND"
+  }
+  queryParams.push(Number(options.minimum_price_per_night) * 100);
+  queryParams.push(Number(options.maximum_price_per_night) * 100);
+  queryString += `${addWord} properties.cost_per_night <= $${queryParams.length} AND properties.cost_per_night >= $${queryParams.length-1} `;
+}
+if (options.minimum_rating) {
+  let addWord = ""
+  if (amount[0] === 'minimum_rating') {
+     addWord = "WHERE"
+  }
+  else if (amount.length >= 2) {
+    addWord = "AND"
+  }
+  else addWord = "WHERE";
+  queryParams.push(`${options.minimum_rating}`);
+  queryString += `${addWord} property_reviews.rating >= $${queryParams.length} `;
 }
 
-exports.getAllProperties = getAllProperties;
+queryParams.push(limit);
+queryString += `
+GROUP BY properties.id
+ORDER BY cost_per_night 
+LIMIT $${queryParams.length};`;
+
+console.log(queryString, queryParams)
+
+return pool.query(queryString, queryParams)
+.then(res => res.rows);
+}
+
+exports.getAllProperties = getAllProperties
 
 
 /**
